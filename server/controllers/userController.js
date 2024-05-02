@@ -2,7 +2,7 @@ const sequelize = require('../db/connection');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-exports.registerUser = async (req, res) => {
+const registerUser = async (req, res) => {
     try {
         const { fullName, email, password } = req.body;
 
@@ -35,7 +35,7 @@ exports.registerUser = async (req, res) => {
 
 
 
-exports.loginUser = async (req, res) => {
+const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -91,3 +91,4 @@ exports.loginUser = async (req, res) => {
     }
 };
 
+module.exports = {registerUser, loginUser}

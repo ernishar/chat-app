@@ -1,18 +1,25 @@
-// app.js (or index.js)
 const express = require('express');
 const cors = require('cors');
-const userRoutes = require('./routes/userRoutes');
-// Import other route files
+const http = require('http');
+const socketLogic = require('./controllers/socket');
 
+// Connect DB
+require('./db/connection');
+
+// app Use
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cors());
 
-app.use('/api', userRoutes);
-// Use other route files
-
 const port = process.env.PORT || 8000;
-app.listen(port, () => {
-    console.log('listening on port ' + port);
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Socket.io
+socketLogic.attach(server);
+
+server.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
 });
