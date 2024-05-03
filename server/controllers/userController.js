@@ -1,6 +1,7 @@
-const sequelize = require('../db/connection');
-const bcryptjs = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const sequelize = require('../db/connection')
+const bcryptjs = require('bcryptjs'); 
+const jwt = require('jsonwebtoken'); 
+
 
 const registerUser = async (req, res) => {
     try {
@@ -10,11 +11,21 @@ const registerUser = async (req, res) => {
             return res.status(400).send('Please fill all required fields');
         }
 
+        // Check if the email already exists
+        const [existingUser] = await sequelize.query(
+            'SELECT * FROM Users WHERE email = :email', 
+            { replacements: { email }, type: sequelize.QueryTypes.SELECT }
+        );
+
+        if (existingUser && existingUser.length > 0) {
+            return res.status(400).send('User with this email already exists');
+        }
+
         // Hash password
         const hashedPassword = await bcryptjs.hash(password, 10);
 
         // Perform raw query to insert user data
-        const [result, _] = await sequelize.query(`
+        const [result] = await sequelize.query(`
             INSERT INTO Users (fullName, email, password) 
             VALUES (?, ?, ?)
         `, {
@@ -32,17 +43,9 @@ const registerUser = async (req, res) => {
     }
 };
 
-
-
-
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        if (!email || !password) {
-            res.status(400).send('Please fill all required fields');
-            return;
-        }
 
         // Perform raw query to fetch user by email
         const [users, metadata] = await sequelize.query(
@@ -52,8 +55,7 @@ const loginUser = async (req, res) => {
 
         // Check if user exists
         if (!users || users.length === 0) {
-            res.status(400).send('User email or password is incorrect');
-            return;
+            return res.status(400).send('User email or password is incorrect');
         }
 
         const user = users[0];
@@ -61,8 +63,7 @@ const loginUser = async (req, res) => {
         // Compare hashed password
         const validateUser = await bcryptjs.compare(password, user.password);
         if (!validateUser) {
-            res.status(400).send('User email or password is incorrect');
-            return;
+            return res.status(400).send('User email or password is incorrect');
         }
 
         // Generate JWT token
@@ -71,24 +72,21 @@ const loginUser = async (req, res) => {
             email: user.email
         };
         const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || 'THIS_IS_A_JWT_SECRET_KEY';
-        jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: 84600 }, async (err, token) => {
-            if (err) {
-                console.error(err);
-                res.status(500).send('Internal Server Error');
-                return;
-            }
-            // Update user with token (you may need to modify this part according to your user model)
-            await sequelize.query(
-                'UPDATE Users SET token = :token WHERE id = :userId',
-                { replacements: { token, userId: user.id } }
-            );
+        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: 84600 });
 
-            res.status(200).json({ user: { id: user.id, email: user.email, fullName: user.fullName }, token });
-        });
+        // Update user with token
+        await sequelize.query(
+            'UPDATE Users SET token = :token WHERE id = :userId',
+            { replacements: { token, userId: user.id } }
+        );
+
+        // Respond with user details and token
+        res.status(200).json({ user: { id: user.id, email: user.email, fullName: user.fullName }, token });
     } catch (error) {
         console.error(error);
         res.status(500).send('Internal Server Error');
     }
 };
 
-module.exports = {registerUser, loginUser}
+
+module.exports = { registerUser, loginUser };
