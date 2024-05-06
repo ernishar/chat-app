@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Img1 from '../../assets/img1.jpg'
-import tutorialsdev from '../../assets/tutorialsdev.png'
+
 import Input from '../../components/Input'
 import { io } from 'socket.io-client'
 
@@ -100,7 +100,7 @@ const Dashboard = () => {
 		<div className='w-screen flex'>
 			<div className='w-[25%] h-screen bg-secondary overflow-scroll'>
 				<div className='flex items-center my-8 mx-14'>
-					<div><img src={tutorialsdev} width={75} height={75} className='border border-primary p-[2px] rounded-full' /></div>
+				
 					<div className='ml-8'>
 						<h3 className='text-2xl'>{user?.fullName}</h3>
 						<p className='text-lg font-light'>My Account</p>

@@ -2,7 +2,7 @@ const { sequelize } = require('../db/connection');
 
 const io = require('socket.io')(8080, {
     cors: {
-        origin: 'http://localhost:3002',
+        origin: 'http://localhost:3000',
     }
 });
 

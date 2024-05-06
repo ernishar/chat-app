@@ -1,92 +1,139 @@
-const sequelize = require('../db/connection')
-const bcryptjs = require('bcryptjs'); 
-const jwt = require('jsonwebtoken'); 
+const { QueryTypes } = require("sequelize");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const emailvalidator = require("email-validator");
+const sequelize = require("../db/connection");
 
+exports.registerUser = async (req, res) => {
+  const { fullName,  email, password} = req.body;
 
-const registerUser = async (req, res) => {
-    try {
-        const { fullName, email, password } = req.body;
+  let profilePic = null;
+  if (req.file) {
+    profilePic = req.file.filename;
+  }
 
-        if (!fullName || !email || !password) {
-            return res.status(400).send('Please fill all required fields');
-        }
+//   if (
+//     !fullName ||
+//     !email ||
+//     !password ||
+//     !profilePic
+//   ) {
+//     return res.status(400).json({ message: "All fields are required" });
+//   }
 
-        // Check if the email already exists
-        const [existingUser] = await sequelize.query(
-            'SELECT * FROM Users WHERE email = :email', 
-            { replacements: { email }, type: sequelize.QueryTypes.SELECT }
-        );
-
-        if (existingUser && existingUser.length > 0) {
-            return res.status(400).send('User with this email already exists');
-        }
-
-        // Hash password
-        const hashedPassword = await bcryptjs.hash(password, 10);
-
-        // Perform raw query to insert user data
-        const [result] = await sequelize.query(`
-            INSERT INTO Users (fullName, email, password) 
-            VALUES (?, ?, ?)
-        `, {
-            replacements: [fullName, email, hashedPassword]
-        });
-
-        if (result && result.affectedRows > 0) {
-            return res.status(200).send('User registered successfully');
-        } else {
-            return res.status(500).send('Failed to register user');
-        }
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+  try {
+    if (!emailvalidator.validate(email)) {
+      return res.status(400).json({ message: "Invalid Email" });
     }
+
+    if (password.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be atleast 6 characters" });
+    }
+
+    // Checking if the user already exists
+    const getAuther = await sequelize.query(
+      `SELECT * FROM users WHERE email = '${email}'`,
+      { type: QueryTypes.SELECT }
+    );
+
+    if (getAuther.length) {
+      return res.status(400).json({ message: "email already exists" });
+    }
+
+    // Hashing the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+
+    await sequelize.query(
+      `INSERT INTO users (fullName, email, password) VALUES ('${fullName}',  '${email}', '${hashedPassword}')`,
+      { type: QueryTypes.INSERT }
+    );
+
+    return res.status(200).json({ message: "success" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
 };
 
-const loginUser = async (req, res) => {
-    try {
-        const { email, password } = req.body;
+exports.loginUser = async (req, res) => {
+  const { email, password } = req.body;
 
-        // Perform raw query to fetch user by email
-        const [users, metadata] = await sequelize.query(
-            'SELECT * FROM Users WHERE email = :email', 
-            { replacements: { email }, type: sequelize.QueryTypes.SELECT }
-        );
+  if (!email || !password) {
+    return res.status(400).json({ message: "email and password are required" });
+  }
 
-        // Check if user exists
-        if (!users || users.length === 0) {
-            return res.status(400).send('User email or password is incorrect');
-        }
+  try {
+    // Checking if the user exists
+    const getUser = await sequelize.query(
+      `SELECT * FROM users WHERE email = :email`,
+      {
+        replacements: { email },
+        type: QueryTypes.SELECT,
+      }
+    );
 
-        const user = users[0];
-
-        // Compare hashed password
-        const validateUser = await bcryptjs.compare(password, user.password);
-        if (!validateUser) {
-            return res.status(400).send('User email or password is incorrect');
-        }
-
-        // Generate JWT token
-        const payload = {
-            userId: user.id,
-            email: user.email
-        };
-        const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || 'THIS_IS_A_JWT_SECRET_KEY';
-        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: 84600 });
-
-        // Update user with token
-        await sequelize.query(
-            'UPDATE Users SET token = :token WHERE id = :userId',
-            { replacements: { token, userId: user.id } }
-        );
-
-        // Respond with user details and token
-        res.status(200).json({ user: { id: user.id, email: user.email, fullName: user.fullName }, token });
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+    // Checking if the user exists
+    if (!getUser.length) {
+      return res.status(400).json({ message: "wrong email" });
     }
+
+    // Getting the hashed password from the database
+    const hashedPassword = getUser[0].password;
+
+    // Comparing the password
+    const validPassword = await bcrypt.compare(password, hashedPassword);
+
+    if (!validPassword) {
+      return res.status(400).json({ message: "wrong password" });
+    } else {
+      return jwt.sign(
+        {
+          userId: getUser[0].userId,
+          email: getUser[0].email,
+          fullName: getUser[0].fullName,
+          profilePic: getUser[0].profilePic
+        },
+        process.env.JWT_SECRET || "NisharAlam",
+        { expiresIn: "1h" },
+        (err, token) => {
+          if (err) {
+            return res.status(500).json({ message: err.message });
+          }
+          return res.status(200).json({ message: "success", token });
+        }
+      );
+    }
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
 };
 
+exports.deleteUser = async (req, res) => {
+  const { userId,} = req.user;
 
-module.exports = { registerUser, loginUser };
+  try {
+    const [user] = await sequelize.query(
+      `SELECT * FROM users WHERE userId = :userId`,
+      {
+        replacements: { userId },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    if (user.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    //Delete the product
+    await sequelize.query(`DELETE FROM users WHERE userId = :userId`, {
+      replacements: { userId },
+      type: sequelize.QueryTypes.DELETE,
+    });
+
+    return res.status(200).json({ message: "success" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
